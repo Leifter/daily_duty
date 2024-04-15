@@ -120,6 +120,7 @@ for d in data_base:
     i += 1
 
 persons = set([ft.person for ft in data_base])   # Получаем имена всех участников
+persons = sorted(persons)
 persons_meals = {}
 for p in persons:
     target = wb.copy_worksheet(wb["Шаблон"])
