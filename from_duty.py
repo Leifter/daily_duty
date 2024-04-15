@@ -1,6 +1,27 @@
 import openpyxl
 import datetime
 
+"""
+Скрипт для формирования раскладок в соответствии с графиком дежурств. Автор Панин С.А.
+Как пользоваться
+!!! Внимание !!! Не допускаются изменения структуры шаблона, без согласования его с данным скриптом. Так нельзя менять
+ формулы и добавлять, удалять строки или столбцы, так как это приведете к изменению координат, заданных в скрипте
+1. Заполнить шаблон в файле "Исходный_Шаблон.xlsx"
+    - Заполнить количество участников
+    - Заполнить кто, когда дежурит
+    - Заполнить базовые блюда в колонке блюд
+    - Провести пересчет ячейки "Общее кол-во приемов пищи"
+    - Если требуется добавить по аналогии новые блюда
+2. Согласовать скрипт с шаблоном
+    - Заполнить словарь MEAL_PLACE в соответствии с координатами количества блюд
+    - Заполнить переменные start_x, end_x, start_y, end_y в соответствии размерами таблицы дежурств
+    - Заполнить переменную out_file_name в соответствии с именем итогового файла дежурств
+3. Выполнить скрипт python from_duty.py. Естественно для этого потребуется установленный python и пакет openpyxl
+4a. Если скрипт выполнился без ошибок вручную проверить итоговую раскладку. Если обнаружены ошибки обратиться к 
+    разработчику за разъяснениями
+4b. Если скрипт выполнился с ошибками обратиться к разработчику за разъяснениями
+"""
+
 
 def get_cell_x_num_by_letter(letter):
     if ord(letter) >= ord('A') and ord(letter) <= ord('Z'):
@@ -30,19 +51,24 @@ class FoodTime(object):
         self.general_food_type = general_food_type
 
     def __repr__(self):
-        return "{} {} {} {}".format(self.date.strftime('%Y-%m-%d'), self.person, self.time_of_day, self.general_food_type)
+        return "{} {} {} {}".format(
+            self.date.strftime('%Y-%m-%d'),
+            self.person,
+            self.time_of_day,
+            self.general_food_type
+        )
 
 
 # Словарь с расположением типов еды на листе
-MIEL_PLACE = {
+MEAL_PLACE = {
     "Геркулес": "G8", "Пшенка": "I8",
     "Харчо": "G14", "Борщ": "I14", "Гороховый": "K14",
     "Гречка": "G20", "Рис": "I20", "Макароны": "K20"
 }
 
 
-file_name = "Раскладка. Питание _24.05.04.xlsx"
-wb = openpyxl.load_workbook(file_name, read_only=False, data_only=True)  # Открыть таблицу с данными о НС
+file_name = "Исходный_Шаблон.xlsx"
+wb = openpyxl.load_workbook(file_name, read_only=False)  # Открыть таблицу с данными о НС
 sheet_names = wb.sheetnames
 print("Найденные листы в книге: {}".format(sheet_names))
 sheet_name = "График"
@@ -81,6 +107,7 @@ for x in range(start_x, end_x + 1):
         ))
         all_count += 1
 
+# FixMe добавить вычисление формулы подсчета количества дежурств
 test_count = int(ws['P6'].value)  # Проверяем данные
 
 print("all_count = {}, test_count = {}".format(all_count, test_count))
@@ -92,6 +119,24 @@ for d in data_base:
     print("{}. {}".format(i, d))
     i += 1
 
-persons = set([ft.person for ft in data_base])
-target = wb.copy_worksheet(wb["Шаблон"])
-print(persons)
+persons = set([ft.person for ft in data_base])   # Получаем имена всех участников
+persons_meals = {}
+for p in persons:
+    target = wb.copy_worksheet(wb["Шаблон"])
+    target.title = p
+    persons_meals[p] = {}
+    for ft in data_base:
+        if ft.person == p:
+            try:
+                persons_meals[p][ft.general_food_type] += 1
+            except KeyError:
+                persons_meals[p][ft.general_food_type] = 1
+
+    for meal in persons_meals[p]:
+        target[MEAL_PLACE[meal]] = persons_meals[p][meal]
+
+
+print(persons_meals)
+
+out_file_name = "Раскладка_Питание_24.05.04.xlsx"
+wb.save(out_file_name)
