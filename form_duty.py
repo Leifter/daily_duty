@@ -13,11 +13,11 @@ import datetime
     - Заполнить базовые блюда в колонке блюд
     - Заполнить количество персон на каждом приеме пищи
     - Провести пересчет ячейки "Общее кол-во приемов пищи". Убедиться, что рассчет захватывает все требуемые ячейки. 
-    Это число требуется только для рассчета количества дежурств на одного человека
+    Это число требуется только для рассчета количества дежурств на одного человека и процедуры проверки в скрипте
     - Если требуется, добавить по аналогии новые блюда
 2. Согласовать скрипт с шаблоном
     - Заполнить словарь MEAL_PLACE в соответствии с координатами количества блюд
-    - Заполнить переменные start_x, end_x, start_y, end_y в соответствии размерами таблицы дежурств
+    - Заполнить переменные START_X, START_Y, END_X, END_Y в соответствии размерами таблицы дежурств
     - Заполнить переменную out_file_name в соответствии с именем итогового файла дежурств
 3. Выполнить скрипт python form_duty.py. Естественно для этого потребуется установленный python и пакет openpyxl
 4a. Если скрипт выполнился без ошибок вручную проверить итоговую раскладку. Если обнаружены ошибки обратиться к 
@@ -25,8 +25,24 @@ import datetime
 4b. Если скрипт выполнился с ошибками обратиться к разработчику за разъяснениями
 """
 
+# ToDo
+#  1. Добавить проверку наличия данного типа еды в графике в колонке с едой
 
-def get_cell_x_num_by_letter(letter):
+
+def get_cell_x_num_by_letter(column):
+    """
+    Преобразует буквенное обозначение Excel-столбца (например, 'A', 'Z', 'AA', 'AZ') в номер столбца (1, 26, 27, 52).
+    """
+    column = column.upper()
+    num = 0
+    for c in column:
+        if ord(c) < ord('A') or ord(c) > ord('Z'):
+            raise Exception("<Error> Wrong letter {}".format(c))
+
+        num = num * 26 + (ord(c) - ord('A') + 1)
+    return num
+
+def get_cell_x_num_by_letter_old(letter):
     if ord(letter) >= ord('A') and ord(letter) <= ord('Z'):
         return ord(letter) - ord('A') + 1
     elif ord(letter) >= ord('a') and ord(letter) <= ord('z'):
@@ -71,8 +87,26 @@ MEAL_PLACE = {
     "Гречка": "G20", "Рис": "I20", "Макароны": "K20"
 }
 
+def get_meal_count(patten_file):
+    """
+    Отдельно открываем график, чтобы считать общее количество питаний, так как оно рассчитывается
+    , а openpyxl сам по себе вычислять формулы не умеет
+    :param patten_file:
+    :return:
+    """
+    wb = openpyxl.load_workbook(patten_file, data_only=True)  # Открыть таблицу с данными о НС
+    sheet_names = wb.sheetnames
+    print("Найденные листы в книге: {}".format(sheet_names))
+    sheet_name = "График"
+    ws = wb[sheet_name]
+    all_meal_count = int(ws['B6'].value)  # Проверяем данные
+    wb.close()
+    return all_meal_count
 
 def form_duty(patten_file, out_file_name):
+
+    test_count = get_meal_count(patten_file)
+
     wb = openpyxl.load_workbook(patten_file, read_only=False)  # Открыть таблицу с данными о НС
     sheet_names = wb.sheetnames
     print("Найденные листы в книге: {}".format(sheet_names))
@@ -83,27 +117,28 @@ def form_duty(patten_file, out_file_name):
     #print(some)
     #quit()
 
-    start_x = get_cell_x_num_by_letter('F')
-    end_x = get_cell_x_num_by_letter('N')
-    print("start_x = {}, end_x = {}".format(start_x, end_x))
-    meal_x = get_cell_x_num_by_letter('E')      # Колонка с блюдом
-    meal_count_x = get_cell_x_num_by_letter('D')  # Колонка с количеством персон
+    START_X = get_cell_x_num_by_letter('G')   # X-координата левого верхнего угла расписания, с которого начинаются фамилии дежурных
+    START_Y = 11                              # Y-координата левого верхнего угла расписания
 
-    start_y = 8
-    end_y = 34
+    END_X = get_cell_x_num_by_letter('AC')    # X-координата правого нижнего угла расписания, на котором заканчиваются фамилии дежурных
+    END_Y = 77                                # Y-координата правого нижнего угла расписания
+
+    print("START_X = {}, end_x = {}".format(START_X, END_X))
+    meal_x = get_cell_x_num_by_letter('E')        # Колонка с блюдом
+    meal_count_x = get_cell_x_num_by_letter('D')  # Колонка с количеством персон
 
     all_count = 0
 
     data_base = []
     start_date = datetime.datetime(year=2024, month=5, day=4)
-    for x in range(start_x, end_x + 1):
+    for x in range(START_X, END_X + 1):
         date = start_date + datetime.timedelta(days=x - 1)
-        for y in range(start_y, end_y + 1):
+        for y in range(START_Y, END_Y + 1):
             person = ws.cell(row=y, column=x).value
             if person is None:
                 continue
             print("row = {} col = {} val = {}".format(y, x, person))
-            time_of_day = (y - start_y) % 3
+            time_of_day = (y - START_Y) % 3
             meal = ws.cell(row=y, column=meal_x).value
             meal_portions = ws.cell(row=y, column=meal_count_x).value
             data_base.append(FoodTime(
@@ -114,9 +149,6 @@ def form_duty(patten_file, out_file_name):
                 meal_portions=meal_portions
             ))
             all_count += 1
-
-    # FixMe добавить вычисление формулы подсчета количества дежурств
-    test_count = int(ws['P6'].value)  # Проверяем данные
 
     print("all_count = {}, test_count = {}".format(all_count, test_count))
     if all_count != test_count:
@@ -142,7 +174,10 @@ def form_duty(patten_file, out_file_name):
                     persons_meals[p][ft.general_food_type] = ft.meal_portions
 
         for meal in persons_meals[p]:
-            target[MEAL_PLACE[meal]] = persons_meals[p][meal]
+            try:
+                target[MEAL_PLACE[meal]] = persons_meals[p][meal]
+            except KeyError:
+                raise Exception("В списке отсутствует еда {}".format(meal))
 
 
     print(persons_meals)
@@ -150,7 +185,10 @@ def form_duty(patten_file, out_file_name):
     wb.save(out_file_name)
 
 
-form_duty(patten_file="Исходный_Шаблон.xlsx", out_file_name="Раскладка_Питание_24.05.04.xlsx")
-form_duty(patten_file="Исходный_Шаблон_Андреев.xlsx", out_file_name="Раскладка_Питание_24.05.04_Андреев.xlsx")
+if __name__ == "__main__":
+    if get_cell_x_num_by_letter('D') != get_cell_x_num_by_letter_old('D'):
+        raise Exception("Refactoring error")
+
+    form_duty(patten_file="Исходный_Шаблон.xlsx", out_file_name="Раскладка_Питание_2025.05.23.xlsx")
 
 
