@@ -26,8 +26,17 @@ import datetime
 """
 
 # ToDo
-#  1. Добавить проверку наличия данного типа еды в графике в колонке с едой
+#  - 1. Добавить проверку наличия данного типа еды в графике в колонке с едой
 
+def get_cell_letter_num_by_x(n):
+    """Преобразует номер столбца в буквенное обозначение Excel"""
+    result = ""
+    if n <= 0:
+        raise Exception("n <= 0 n = {}".format(n))
+    while n > 0:
+        n, remainder = divmod(n - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
 
 def get_cell_x_num_by_letter(column):
     """
@@ -140,6 +149,14 @@ def form_duty(patten_file, out_file_name):
             print("row = {} col = {} val = {}".format(y, x, person))
             time_of_day = (y - START_Y) % 3
             meal = ws.cell(row=y, column=meal_x).value
+            # Проверка наличия данного типа еды в списке MEAL_PLACE
+            if meal not in MEAL_PLACE.keys():
+                raise Exception("meal {} at cell {}{} not in MEAL_PLACE = {}".format(
+                    meal,
+                    get_cell_letter_num_by_x(meal_x),
+                    y,
+                    MEAL_PLACE.keys()))
+
             meal_portions = ws.cell(row=y, column=meal_count_x).value
             data_base.append(FoodTime(
                 person=person,
